@@ -1,8 +1,13 @@
 import axios from "axios";
+import crypto from "crypto";
 import ffmpeg from "fluent-ffmpeg";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
 import { PassThrough } from "stream";
 import sharp from "sharp";
 import { BadRequestError } from "../errors/BadRequestError";
+import { ProcessingError } from "../errors/ProcessingError";
 import { RemoteFetchError } from "../errors/RemoteFetchError";
 import { UnsupportedMediaError } from "../errors/UnsupportedMediaError";
 import { buildCacheKey, buildThumbnailKey } from "../utils/cacheKey";
@@ -28,6 +33,38 @@ export interface ProcessedVideoResult {
   width?: number;
   height?: number;
   format?: "jpeg" | "png" | "webp";
+}
+
+async function writeTempVideoFile(buffer: Buffer): Promise<string> {
+  const filename = `video-${crypto.randomUUID()}.bin`;
+  const filePath = path.join(os.tmpdir(), filename);
+  await fs.writeFile(filePath, buffer);
+  return filePath;
+}
+
+async function deleteTempFile(filePath: string): Promise<void> {
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    // Best-effort cleanup.
+  }
+}
+
+export async function getVideoDurationSeconds(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (error, metadata) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      const duration = metadata.format?.duration;
+      if (typeof duration !== "number" || Number.isNaN(duration)) {
+        reject(new Error("Unable to determine video duration"));
+        return;
+      }
+      resolve(duration);
+    });
+  });
 }
 
 async function downloadVideo(url: string): Promise<Buffer> {
@@ -65,13 +102,10 @@ async function downloadVideo(url: string): Promise<Buffer> {
 }
 
 export async function extractFrameBuffer(
-  videoBuffer: Buffer,
+  filePath: string,
   timeSeconds: number
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const inputStream = new PassThrough();
-    inputStream.end(videoBuffer);
-
     const outputStream = new PassThrough();
     const chunks: Buffer[] = [];
 
@@ -79,19 +113,33 @@ export async function extractFrameBuffer(
       chunks.push(chunk as Buffer);
     });
     outputStream.on("end", () => {
+      if (chunks.length === 0) {
+        reject(new Error("No frame data produced"));
+        return;
+      }
       resolve(Buffer.concat(chunks));
     });
     outputStream.on("error", (error) => {
       reject(error);
     });
 
-    ffmpeg(inputStream)
+    const stderrLines: string[] = [];
+
+    // Use a temp file so ffmpeg can seek reliably.
+    ffmpeg(filePath)
       .seekInput(timeSeconds)
       .outputOptions("-frames:v 1")
       .outputOptions("-vcodec mjpeg")
       .format("image2")
+      .on("stderr", (line) => {
+        stderrLines.push(line);
+      })
       .on("error", (error) => {
-        reject(error);
+        const details = stderrLines.slice(-5).join("\n");
+        const message = details
+          ? `${error.message}. ffmpeg stderr:\n${details}`
+          : error.message;
+        reject(new Error(message));
       })
       .pipe(outputStream, { end: true });
   });
@@ -126,11 +174,25 @@ export async function processVideoThumbnail(
   }
 
   const videoBuffer = await downloadVideo(params.url);
+  const tempPath = await writeTempVideoFile(videoBuffer);
   let frameBuffer: Buffer;
   try {
-    frameBuffer = await extractFrameBuffer(videoBuffer, params.time);
-  } catch {
-    throw new BadRequestError("Requested time is outside video duration");
+    const duration = await getVideoDurationSeconds(tempPath);
+    if (params.time > duration) {
+      throw new BadRequestError("Requested time is outside video duration");
+    }
+    frameBuffer = await extractFrameBuffer(tempPath, params.time);
+  } catch (error: any) {
+    if (error instanceof BadRequestError) {
+      throw error;
+    }
+    const message = typeof error?.message === "string" ? error.message : "";
+    if (message.toLowerCase().includes("ffmpeg") && message.toLowerCase().includes("not found")) {
+      throw new ProcessingError("ffmpeg is not available on the host");
+    }
+    throw new ProcessingError(`Failed to extract video frame: ${message || "unknown error"}`);
+  } finally {
+    await deleteTempFile(tempPath);
   }
 
   let pipeline = sharp(frameBuffer);

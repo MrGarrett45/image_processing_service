@@ -35,7 +35,22 @@ npm test
 ```
 
 ## Requirements
-- `ffmpeg` must be installed and available on the PATH for video thumbnails.
+To run the thumbnail endpoint locally, `ffmpeg` must be installed and available on your PATH for video thumbnails.
+
+Windows (winget):
+```
+winget install Gyan.FFmpeg
+```
+
+Windows (choco):
+```
+choco install ffmpeg
+```
+
+macOS (Homebrew):
+```
+brew install ffmpeg
+```
 
 ## Healthcheck
 `GET /healthcheck`

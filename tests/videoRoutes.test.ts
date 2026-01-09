@@ -54,6 +54,9 @@ describe("GET /video/thumbnail", () => {
     jest
       .spyOn(videoService, "extractFrameBuffer")
       .mockResolvedValueOnce(frameBuffer);
+    jest
+      .spyOn(videoService, "getVideoDurationSeconds")
+      .mockResolvedValueOnce(10);
 
     const response = await request(app).get("/video/thumbnail").query({
       url: "https://8.8.8.8/video.mp4",
