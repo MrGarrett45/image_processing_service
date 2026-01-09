@@ -1,5 +1,15 @@
 # image_processing_service
-Receive images and change their formats via an Express.js backend.
+Receive images and change their formats via an Express.js backend. Returns a link to an S3 bucket where the reformated image
+is hosted.
+
+## Quick testing
+This application is already deployed behind API Gateway at the following address:
+https://srk3rzk3j5.execute-api.us-east-1.amazonaws.com/
+
+Some quick endpoints to hit to verify functionality:
+https://srk3rzk3j5.execute-api.us-east-1.amazonaws.com/process?url=https://media.wired.com/photos/5926ffe47034dc5f91bed4e8/3:2/w_1920,c_limit/google-logo.jpg&width=100&height=150&format=png&quality=80&crop=fill
+
+https://srk3rzk3j5.execute-api.us-east-1.amazonaws.com/video/thumbnail?url=https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4&time=26&width=320
 
 ## Setup
 ```bash
@@ -72,6 +82,7 @@ Response:
 ```
 
 ### GET /video/thumbnail
+(Works best on short videos, longer videos may result in timeout/rejection)
 Example:
 ```
 GET /video/thumbnail?url=https://example.com/video.mp4&time=2&width=320
