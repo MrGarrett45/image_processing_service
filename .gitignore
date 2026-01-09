@@ -23,4 +23,5 @@ lerna-debug.log*
 .temp
 .tmp
 
+#Scratch file
 SCRATCH.md
