@@ -9,7 +9,7 @@ export function buildCacheKey(params: {
   crop?: string;
   time?: number;
 }): string {
-  // Hash the canonicalized inputs to build deterministic cache keys.
+  // Hash the inputs to build cache keys.
   const canonical = [
     `url=${params.url}`,
     `w=${params.width ?? ""}`,
@@ -17,7 +17,7 @@ export function buildCacheKey(params: {
     `f=${params.format ?? ""}`,
     `q=${params.quality ?? ""}`,
     `c=${params.crop ?? ""}`,
-    `t=${params.time ?? ""}`
+    `t=${params.time ?? ""}`,
   ].join("|");
 
   return crypto.createHash("sha256").update(canonical).digest("hex");
