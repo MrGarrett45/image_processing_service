@@ -6,15 +6,29 @@ Receive images and change their formats via an Express.js backend.
 npm install
 ```
 
+## Requirements
+To run the thumbnail endpoint locally, `ffmpeg` must be installed and available on your PATH for video thumbnails.
+
+Windows (winget):
+```
+winget install Gyan.FFmpeg
+```
+
+Windows (choco):
+```
+choco install ffmpeg
+```
+
+macOS (Homebrew):
+```
+brew install ffmpeg
+```
+
 ## Environment
 Required:
-- `IMAGE_BUCKET_NAME`
+- `IMAGE_BUCKET_NAME` (message me for bucket name for easiest testing)
 - `AWS_REGION`
-
-Optional:
 - `IMAGE_BUCKET_BASE_URL` (public base URL for assets)
-
-AWS credentials should be provided via environment variables or an AWS profile.
 
 Create a `.env` file (see `.env.example`) and set the values there.
 
@@ -34,28 +48,10 @@ npm start
 npm test
 ```
 
-## Requirements
-To run the thumbnail endpoint locally, `ffmpeg` must be installed and available on your PATH for video thumbnails.
-
-Windows (winget):
-```
-winget install Gyan.FFmpeg
-```
-
-Windows (choco):
-```
-choco install ffmpeg
-```
-
-macOS (Homebrew):
-```
-brew install ffmpeg
-```
+## API
 
 ## Healthcheck
 `GET /healthcheck`
-
-## API
 
 ### GET /process
 Example:
