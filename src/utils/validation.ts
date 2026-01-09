@@ -1,4 +1,10 @@
 import { BadRequestError } from "../errors/BadRequestError";
+import {
+  CropMode,
+  ImageFormat,
+  ProcessImageQuery,
+  VideoThumbnailQuery,
+} from "../types/media";
 
 const MAX_DIMENSION = 5000;
 
@@ -39,7 +45,7 @@ export function parseTime(value: string | undefined): number {
 
 export function parseFormat(
   value: string | undefined
-): "jpeg" | "png" | "webp" | undefined {
+): ImageFormat | undefined {
   if (!value) return undefined;
   const normalized = value.toLowerCase();
   if (normalized === "jpg") return "jpeg";
@@ -49,9 +55,7 @@ export function parseFormat(
   throw new BadRequestError("format must be jpeg, png, or webp");
 }
 
-export function parseCrop(
-  value: string | undefined
-): "fill" | "fit" | "inside" | "outside" {
+export function parseCrop(value: string | undefined): CropMode {
   if (!value) return "fill";
   const normalized = value.toLowerCase();
   if (
@@ -65,10 +69,19 @@ export function parseCrop(
   throw new BadRequestError("crop must be fill, fit, inside, or outside");
 }
 
+function getQueryValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0];
+  }
+  return undefined;
+}
+
 export async function validateRemoteUrl(
   rawUrl: string | undefined
 ): Promise<string> {
-  // Basic SSRF protection: allow only public http(s) endpoints.
   if (!rawUrl) {
     throw new BadRequestError("url is required");
   }
@@ -85,4 +98,44 @@ export async function validateRemoteUrl(
   }
 
   return parsed.toString();
+}
+
+export async function validateProcessQuery(
+  query: Record<string, unknown>
+): Promise<ProcessImageQuery> {
+  const url = await validateRemoteUrl(getQueryValue(query.url));
+  const width = parsePositiveInt(getQueryValue(query.width), "width");
+  const height = parsePositiveInt(getQueryValue(query.height), "height");
+  const format = parseFormat(getQueryValue(query.format));
+  const quality = parseQuality(getQueryValue(query.quality));
+  const crop = parseCrop(getQueryValue(query.crop));
+
+  return {
+    url,
+    width,
+    height,
+    format,
+    quality,
+    crop,
+  };
+}
+
+export async function validateVideoThumbnailQuery(
+  query: Record<string, unknown>
+): Promise<VideoThumbnailQuery> {
+  const url = await validateRemoteUrl(getQueryValue(query.url));
+  const time = parseTime(getQueryValue(query.time));
+  const width = parsePositiveInt(getQueryValue(query.width), "width");
+  const height = parsePositiveInt(getQueryValue(query.height), "height");
+  const format = parseFormat(getQueryValue(query.format));
+  const quality = parseQuality(getQueryValue(query.quality));
+
+  return {
+    url,
+    time,
+    width,
+    height,
+    format,
+    quality,
+  };
 }

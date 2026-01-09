@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
+import { appConfig } from "../config/env";
 import { StorageError } from "../errors/StorageError";
 
 export interface StoredObjectInfo {
@@ -10,37 +11,38 @@ export interface StoredObjectInfo {
   url: string;
 }
 
-const bucketName = process.env.IMAGE_BUCKET_NAME;
-const region = process.env.AWS_REGION;
-
-if (!bucketName) {
-  throw new StorageError("IMAGE_BUCKET_NAME is not set");
-}
-if (!region) {
-  throw new StorageError("AWS_REGION is not set");
-}
-
-const s3Client = new S3Client({ region });
+const s3Client = new S3Client({ region: appConfig.region });
 
 export function buildPublicUrl(key: string): string {
-  const baseUrl = process.env.IMAGE_BUCKET_BASE_URL;
-  if (baseUrl) {
-    return `${baseUrl.replace(/\/$/, "")}/${key}`;
+  if (appConfig.baseUrl) {
+    return `${appConfig.baseUrl.replace(/\/$/, "")}/${key}`;
   }
-  return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
+  return `https://${appConfig.bucketName}.s3.${appConfig.region}.amazonaws.com/${key}`;
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const metadata = (error as { $metadata?: { httpStatusCode?: number } }).$metadata;
+  if (metadata?.httpStatusCode === 404) {
+    return true;
+  }
+  const name = (error as { name?: string }).name;
+  return name === "NotFound";
 }
 
 export async function getObjectIfExists(key: string): Promise<boolean> {
   try {
     await s3Client.send(
       new HeadObjectCommand({
-        Bucket: bucketName,
+        Bucket: appConfig.bucketName,
         Key: key
       })
     );
     return true;
-  } catch (error: any) {
-    if (error?.$metadata?.httpStatusCode === 404 || error?.name === "NotFound") {
+  } catch (error: unknown) {
+    if (isNotFoundError(error)) {
       return false;
     }
     throw new StorageError("Failed to check object in S3");
@@ -56,7 +58,7 @@ export async function uploadObject(
   try {
     await s3Client.send(
       new PutObjectCommand({
-        Bucket: bucketName,
+        Bucket: appConfig.bucketName,
         Key: key,
         Body: body,
         ContentType: contentType,

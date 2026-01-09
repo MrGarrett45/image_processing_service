@@ -2,6 +2,7 @@ import axios from "axios";
 import sharp, { FitEnum, Metadata } from "sharp";
 import { RemoteFetchError } from "../errors/RemoteFetchError";
 import { UnsupportedMediaError } from "../errors/UnsupportedMediaError";
+import { CropMode, ImageFormat, ProcessImageQuery } from "../types/media";
 import { buildCacheKey, buildImageKey } from "../utils/cacheKey";
 import {
   buildPublicUrl,
@@ -13,21 +14,12 @@ import {
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 8000;
 
-const cropToFit: Record<string, keyof FitEnum> = {
+const cropToFit: Record<CropMode, keyof FitEnum> = {
   fill: "cover",
   fit: "contain",
   inside: "inside",
   outside: "outside",
 };
-
-export interface ProcessImageParams {
-  url: string;
-  width?: number;
-  height?: number;
-  format?: "jpeg" | "png" | "webp";
-  quality?: number;
-  crop?: "fill" | "fit" | "inside" | "outside";
-}
 
 export interface ProcessedImageResult {
   key: string;
@@ -35,7 +27,7 @@ export interface ProcessedImageResult {
   cached: boolean;
   width?: number;
   height?: number;
-  format?: "jpeg" | "png" | "webp";
+  format?: ImageFormat;
 }
 
 async function downloadImage(url: string): Promise<Buffer> {
@@ -58,24 +50,26 @@ async function downloadImage(url: string): Promise<Buffer> {
       throw new RemoteFetchError("Image exceeds maximum size limit", 413);
     }
     return buffer;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnsupportedMediaError) {
       throw error;
     }
-    if (error?.response?.status) {
-      throw new RemoteFetchError("Failed to download image", 502);
-    }
-    if (error?.code === "ECONNABORTED") {
-      throw new RemoteFetchError("Remote image request timed out", 504);
+    if (axios.isAxiosError(error)) {
+      if (error.code === "ECONNABORTED") {
+        throw new RemoteFetchError("Remote image request timed out", 504);
+      }
+      if (error.response?.status) {
+        throw new RemoteFetchError("Failed to download image", 502);
+      }
     }
     throw new RemoteFetchError("Failed to download image", 502);
   }
 }
 
 function resolveOutputFormat(
-  requested: ProcessImageParams["format"],
+  requested: ImageFormat | undefined,
   metadata: Metadata
-): "jpeg" | "png" | "webp" {
+): ImageFormat {
   if (requested) return requested;
   const input = metadata.format;
   if (input === "jpeg" || input === "png" || input === "webp") {
@@ -85,7 +79,7 @@ function resolveOutputFormat(
 }
 
 export async function processImage(
-  params: ProcessImageParams
+  params: ProcessImageQuery
 ): Promise<ProcessedImageResult> {
   const hash = buildCacheKey({
     url: params.url,
@@ -96,7 +90,7 @@ export async function processImage(
     crop: params.crop,
   });
 
-  const candidateExtensions: Array<"jpeg" | "png" | "webp"> = params.format
+  const candidateExtensions: Array<ImageFormat> = params.format
     ? [params.format]
     : ["jpeg", "png", "webp"];
 

@@ -10,6 +10,7 @@ import { BadRequestError } from "../errors/BadRequestError";
 import { ProcessingError } from "../errors/ProcessingError";
 import { RemoteFetchError } from "../errors/RemoteFetchError";
 import { UnsupportedMediaError } from "../errors/UnsupportedMediaError";
+import { ImageFormat, VideoThumbnailQuery } from "../types/media";
 import { buildCacheKey, buildThumbnailKey } from "../utils/cacheKey";
 import { buildPublicUrl, getObjectIfExists, uploadObject } from "./storageService";
 
@@ -17,22 +18,13 @@ import { buildPublicUrl, getObjectIfExists, uploadObject } from "./storageServic
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 12000;
 
-export interface ProcessVideoParams {
-  url: string;
-  time: number;
-  width?: number;
-  height?: number;
-  format?: "jpeg" | "png" | "webp";
-  quality?: number;
-}
-
 export interface ProcessedVideoResult {
   key: string;
   url: string;
   cached: boolean;
   width?: number;
   height?: number;
-  format?: "jpeg" | "png" | "webp";
+  format?: ImageFormat;
 }
 
 async function writeTempVideoFile(buffer: Buffer): Promise<string> {
@@ -87,15 +79,17 @@ async function downloadVideo(url: string): Promise<Buffer> {
       throw new RemoteFetchError("Video exceeds maximum size limit", 413);
     }
     return buffer;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnsupportedMediaError) {
       throw error;
     }
-    if (error?.response?.status) {
-      throw new RemoteFetchError("Failed to download video", 502);
-    }
-    if (error?.code === "ECONNABORTED") {
-      throw new RemoteFetchError("Remote video request timed out", 504);
+    if (axios.isAxiosError(error)) {
+      if (error.code === "ECONNABORTED") {
+        throw new RemoteFetchError("Remote video request timed out", 504);
+      }
+      if (error.response?.status) {
+        throw new RemoteFetchError("Failed to download video", 502);
+      }
     }
     throw new RemoteFetchError("Failed to download video", 502);
   }
@@ -146,7 +140,7 @@ export async function extractFrameBuffer(
 }
 
 export async function processVideoThumbnail(
-  params: ProcessVideoParams
+  params: VideoThumbnailQuery
 ): Promise<ProcessedVideoResult> {
   if (params.time < 0) {
     throw new BadRequestError("time must be >= 0");
@@ -161,7 +155,7 @@ export async function processVideoThumbnail(
     time: params.time
   });
 
-  const candidateExtensions: Array<"jpeg" | "png" | "webp"> = params.format
+  const candidateExtensions: Array<ImageFormat> = params.format
     ? [params.format]
     : ["jpeg", "png", "webp"];
 
@@ -182,12 +176,15 @@ export async function processVideoThumbnail(
       throw new BadRequestError("Requested time is outside video duration");
     }
     frameBuffer = await extractFrameBuffer(tempPath, params.time);
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof BadRequestError) {
       throw error;
     }
-    const message = typeof error?.message === "string" ? error.message : "";
-    if (message.toLowerCase().includes("ffmpeg") && message.toLowerCase().includes("not found")) {
+    const message = error instanceof Error ? error.message : "";
+    if (
+      message.toLowerCase().includes("ffmpeg") &&
+      message.toLowerCase().includes("not found")
+    ) {
       throw new ProcessingError("ffmpeg is not available on the host");
     }
     throw new ProcessingError(`Failed to extract video frame: ${message || "unknown error"}`);

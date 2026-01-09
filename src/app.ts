@@ -1,5 +1,6 @@
 import express from "express";
 import imageRoutes from "./routes/imageRoutes";
+import videoRoutes from "./routes/videoRoutes";
 import { errorHandler } from "./middleware/errorHandler";
 
 export const app = express();
@@ -11,4 +12,5 @@ app.get("/healthcheck", (_req, res) => {
 });
 
 app.use("/", imageRoutes);
+app.use("/", videoRoutes);
 app.use(errorHandler);
