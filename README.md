@@ -3,7 +3,7 @@ Receive images and change their formats via an Express.js backend. Returns a lin
 is hosted.
 
 ## Quick testing
-This application is already deployed behind API Gateway at the following address:
+This application is already deployed behind API Gateway (uses Lambda/ECR integration) at the following address:
 https://srk3rzk3j5.execute-api.us-east-1.amazonaws.com/
 
 Some quick endpoints to hit to verify functionality:
